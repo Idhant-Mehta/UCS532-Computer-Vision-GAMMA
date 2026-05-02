@@ -46,7 +46,7 @@ Real-time drowsiness and yawning detection built with **OpenCV**, **dlib**, and 
 .
 ├── app.py                  # Streamlit app (webcam + image analysis)
 ├── driver_3_python.py      # CLI script (webcam + folder mode)
-├── classical_cv_pipeline.py# Haar + HOG + ellipse pipeline
+├── classical_cv_pipeline.py # Haar + HOG + ellipse pipeline
 ├── train_eye_svm.py        # Train eye-state SVM (downloads MRL dataset)
 ├── requirements.txt
 └── eye_svm_model.pkl       # Generated after training (place in repo root)

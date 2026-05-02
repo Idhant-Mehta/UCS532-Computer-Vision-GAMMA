@@ -1,43 +1,42 @@
 # 👁️ DrowsAlert — Driver Fatigue Detection
 
-A real-time drowsiness and yawning detection system built with **OpenCV**, **dlib**, and **Streamlit**. It analyses facial landmarks to compute Eye Aspect Ratio (EAR) and Mouth Aspect Ratio (MAR), flagging signs of driver fatigue in real time.
+Real-time drowsiness and yawning detection built with **OpenCV**, **dlib**, and **Streamlit**. The system localizes eyes and mouth using Haar cascades, scores eye openness with a HOG+SVM classifier plus geometric confidence, and flags fatigue using a mouth aspect ratio (MAR).
 
 ---
 
 ## Features
 
-- **Webcam snapshot analysis** — capture a frame via browser and get instant EAR/MAR readings
-- **Batch image analysis** — upload multiple images, get annotated results with a download button for each
-- **Adjustable thresholds** — tune EAR and MAR sensitivity live from the sidebar
-- **68-point landmark overlay** — optional mesh drawn over detected faces
-- **Multi-face support** — detects and reports on multiple faces in a single frame
+- **Webcam snapshot analysis** — capture a frame via browser and get instant results
+- **Batch image analysis** — upload multiple images, get annotated outputs with download buttons
+- **Adjustable thresholds** — tune eye and mouth sensitivity from the sidebar
+- **ROI box overlay** — optional bounding boxes for eyes and mouth
+- **Multi-face support** — detects and reports on multiple faces per frame
 
 ---
 
 ## How It Works
 
-Detection relies on two geometric ratios computed from dlib's 68-point facial landmark model.
+### Eye Openness Score (fused classical pipeline)
 
-### EAR — Eye Aspect Ratio
-
-```
-EAR = (‖p2−p6‖ + ‖p3−p5‖) / (2 · ‖p1−p4‖)
-```
-
-Six landmark points per eye are used. When the eye is open, EAR stays roughly between 0.25–0.35. When the eye closes, it drops sharply toward zero. If EAR falls below the configured threshold, drowsiness is flagged.
+1. **Face detection** with dlib’s HOG+SVM detector
+2. **Eye ROI localization** using Haar cascades in the top 55% of the face
+3. **HOG + LinearSVC** classifier predicts open/closed eye state
+4. **Canny + ellipse fitting** provides geometric confidence
+5. **Final eye score** = 70% SVM confidence + 30% ellipse ratio (range 0–1)
 
 ### MAR — Mouth Aspect Ratio
 
-The same approach is applied to the 20 mouth landmark points. A high MAR value indicates a wide-open mouth, which is treated as a yawn event. Unlike EAR, yawning is detected on a single-frame basis.
+1. **Mouth ROI localization** using Haar cascades in the bottom 40% of the face
+2. **Contour geometry** computes MAR as bounding-rect height/width
+3. **High MAR** values indicate yawning
 
 ### Detection Pipeline
 
 1. Convert frame to grayscale
-2. dlib HOG face detector finds bounding boxes
-3. 68-point shape predictor localises facial geometry
-4. Extract eye landmarks (points 36–47) and mouth landmarks (points 48–67)
-5. Compute EAR and MAR per detected face
-6. Compare against thresholds → trigger alert
+2. Detect faces (dlib HOG+SVM)
+3. Localize eye and mouth ROIs (Haar cascades)
+4. Compute eye openness score and MAR
+5. Apply thresholds → trigger alerts
 
 ---
 
@@ -45,10 +44,12 @@ The same approach is applied to the 20 mouth landmark points. A high MAR value i
 
 ```
 .
-├── app.py                                  # Streamlit deployment
-├── drowsiness_detection.py                 # Original CLI script (webcam + dataset modes)
-├── shape_predictor_68_face_landmarks.dat   # dlib landmark model (download separately)
-└── requirements.txt
+├── app.py                  # Streamlit app (webcam + image analysis)
+├── driver_3_python.py      # CLI script (webcam + folder mode)
+├── classical_cv_pipeline.py# Haar + HOG + ellipse pipeline
+├── train_eye_svm.py        # Train eye-state SVM (downloads MRL dataset)
+├── requirements.txt
+└── eye_svm_model.pkl       # Generated after training (place in repo root)
 ```
 
 ---
@@ -58,31 +59,35 @@ The same approach is applied to the 20 mouth landmark points. A high MAR value i
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/drowsalert.git
-cd drowsalert
+git clone https://github.com/Idhant-Mehta/UCS532-Computer-Vision-GAMMA.git
+cd UCS532-Computer-Vision-GAMMA
 ```
 
-### 2. Install dependencies
+### 2. Install runtime dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-> **Note:** `dlib` requires CMake and a C++ compiler. On Ubuntu: `sudo apt install cmake build-essential`. On Windows, install CMake from cmake.org and use Visual Studio Build Tools.
-
-### 3. Download the landmark model
-
-The `shape_predictor_68_face_landmarks.dat` file is required but not included in this repo due to its size (~100 MB).
-
-Download it from the [dlib model zoo](http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2), extract it, and place it in the project root alongside `app.py`.
+### 3. Install training dependencies (also required for loading the model)
 
 ```bash
-# Linux / macOS
-wget http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
-bzip2 -d shape_predictor_68_face_landmarks.dat.bz2
+pip install scikit-learn scikit-image joblib
 ```
 
-### 4. Run the Streamlit app
+### 4. Train or provide the eye SVM model
+
+The app and CLI expect `eye_svm_model.pkl` in the project root.
+
+```bash
+python train_eye_svm.py
+```
+
+This script downloads the **MRL Eye Dataset (~4 GB)** if `eye_dataset/` is missing, then trains and saves the model.
+
+---
+
+## Run the Streamlit App
 
 ```bash
 streamlit run app.py
@@ -92,12 +97,10 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 
 ---
 
-## Running the Original CLI Script
-
-The original `drowsiness_detection.py` supports two modes:
+## Run the CLI Script
 
 ```bash
-python drowsiness_detection.py
+python driver_3_python.py
 ```
 
 ```
@@ -105,8 +108,8 @@ A. webcam (enter 1)
 B. sample image (enter 2)
 ```
 
-- **Mode 1** — opens the default webcam, runs detection live, press `ESC` to quit
-- **Mode 2** — prompts for a folder path and processes all images (`.jpg`, `.jpeg`, `.png`, `.bmp`) in it
+- **Mode 1** — opens the default webcam and runs detection live (press `ESC` to quit)
+- **Mode 2** — prompts for a folder path and processes `.jpg`, `.jpeg`, `.png`, `.bmp` images
 
 ---
 
@@ -114,15 +117,15 @@ B. sample image (enter 2)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| EAR Threshold | `0.25` | EAR below this value → drowsy |
-| MAR Threshold | `0.75` | MAR above this value → yawning |
-| Draw Landmark Mesh | `True` | Overlay 68-point landmarks on the frame |
-
-These can be adjusted live via the sidebar in the Streamlit app, or changed directly in `drowsiness_detection.py` at the top of the file.
+| Eye Openness Threshold | `0.18` | Eye score below this value → drowsy |
+| MAR Threshold | `0.60` | MAR above this value → yawning |
+| Consecutive Closed Frames (CLI) | `20` | Frames required before drowsy alert in webcam mode |
 
 ---
 
 ## Dependencies
+
+**Runtime**
 
 ```
 streamlit>=1.32.0
@@ -133,27 +136,21 @@ scipy>=1.11.0
 Pillow>=10.0.0
 ```
 
----
+**Training / model loading**
 
-## Landmark Reference
-
-| Points | Region |
-|--------|--------|
-| 0–16 | Jawline |
-| 17–21 | Left eyebrow |
-| 22–26 | Right eyebrow |
-| 27–35 | Nose |
-| 36–41 | Left eye (EAR) |
-| 42–47 | Right eye (EAR) |
-| 48–67 | Mouth (MAR) |
+```
+scikit-learn
+scikit-image
+joblib
+```
 
 ---
 
 ## References
 
-- Soukupová & Čech (2016) — *Real-Time Eye Blink Detection using Facial Landmarks* — the paper that introduced EAR
-- [dlib](http://dlib.net/) — face detection and shape prediction
-- [iBUG 300-W dataset](https://ibug.doc.ic.ac.uk/resources/300-W/) — used to train the 68-point landmark model
+- [MRL Eye Dataset](http://mrl.cs.vsb.cz/eyedataset) — used to train the eye-state classifier
+- [dlib](http://dlib.net/) — face detection
+- [OpenCV Haar cascades](https://docs.opencv.org/master/d7/d8b/tutorial_py_face_detection.html)
 
 ## Authors
 
@@ -162,5 +159,4 @@ Pillow>=10.0.0
 | 1 | **Sherry Singh** | 102323042 | [@sherrysingh1410](https://github.com/sherrysingh1410) |
 | 2 | **Idhant Mehta** | 102323064 | [@Idhant-Mehta](https://github.com/Idhant-Mehta) |
 | 3 | **Sparsh** | 102323080 | [@sparsh0106](https://github.com/sparsh0106) |
-| 3 | **Garv Talwar** | 102373005 | [@garvtalwar](https://github.com/garvtalwar) |
-
+| 4 | **Garv Talwar** | 102373005 | [@garvtalwar](https://github.com/garvtalwar) |
